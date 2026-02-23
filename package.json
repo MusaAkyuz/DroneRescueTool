@@ -1,7 +1,7 @@
 {
-  "name": "all-electron-vite-project-template",
+  "name": "drone-rescue-tool",
   "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "description": "Drone video ve telemetri verilerini kullanarak doğada yabancı cisimleri tespit eden taşınabilir görüntü işleme aracı",
   "main": "./out/main/index.js",
   "author": "example.com",
   "homepage": "https://electron-vite.org",

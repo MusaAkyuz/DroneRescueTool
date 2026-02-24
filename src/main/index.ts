@@ -2,6 +2,10 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { BackendService } from './bridge'
+
+// Python backend servisi
+const backendService = new BackendService()
 
 function createWindow(): void {
   // Create the browser window.
@@ -13,8 +17,8 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
-    }
+      sandbox: false,
+    },
   })
 
   mainWindow.on('ready-to-show', () => {
@@ -52,6 +56,28 @@ app.whenReady().then(() => {
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
 
+  // IPC: Renderer'dan Python backend'e mesaj gönderme
+  ipcMain.handle(
+    'python:request',
+    async (_event, type: string, payload: Record<string, unknown> = {}) => {
+      try {
+        const response = await backendService.request(type, payload)
+        return { success: true, data: response }
+      } catch (err) {
+        return { success: false, error: (err as Error).message }
+      }
+    },
+  )
+
+  ipcMain.handle('python:status', () => {
+    return { connected: backendService.isConnected }
+  })
+
+  // Python backend'i başlat
+  backendService.initialize().catch((err) => {
+    console.error('Python backend başlatılamadı:', err)
+  })
+
   createWindow()
 
   app.on('activate', function () {
@@ -68,6 +94,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+// Uygulama kapanırken Python backend'i kapat
+app.on('before-quit', () => {
+  backendService.shutdown()
 })
 
 // In this file you can include the rest of your app's specific main process

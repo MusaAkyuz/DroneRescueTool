@@ -1,5 +1,14 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  protocol,
+  net,
+} from 'electron'
+import { join, extname, basename } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { BackendService } from './bridge'
@@ -7,11 +16,49 @@ import { BackendService } from './bridge'
 // Python backend servisi
 const backendService = new BackendService()
 
+// Allowed file extensions
+const ALLOWED_VIDEO_EXTENSIONS = [
+  '.mp4',
+  '.avi',
+  '.mov',
+  '.mkv',
+  '.webm',
+  '.flv',
+]
+const ALLOWED_IMAGE_EXTENSIONS = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.bmp',
+  '.tiff',
+  '.webp',
+]
+const ALLOWED_EXTENSIONS = [
+  ...ALLOWED_VIDEO_EXTENSIONS,
+  ...ALLOWED_IMAGE_EXTENSIONS,
+]
+
+// Register custom protocol for serving local media files to renderer
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'local-media',
+    privileges: {
+      stream: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+    },
+  },
+])
+
+let mainWindow: BrowserWindow | null = null
+
 function createWindow(): void {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    minWidth: 900,
+    minHeight: 600,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -22,7 +69,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow!.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -53,8 +100,92 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Local media protocol handler - serves local files for video/image preview
+  protocol.handle('local-media', (request) => {
+    const url = new URL(request.url)
+    const filePath = url.searchParams.get('path')
+    if (!filePath) {
+      return new Response('Missing path parameter', { status: 400 })
+    }
+    return net.fetch(pathToFileURL(filePath).toString(), {
+      headers: request.headers,
+    })
+  })
+
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
+
+  // ─── File Selection ───
+  ipcMain.handle('drone:select-files', async () => {
+    if (!mainWindow) return []
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Dosya Seçin',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        {
+          name: 'Medya Dosyaları',
+          extensions: ALLOWED_EXTENSIONS.map((e) => e.slice(1)), // remove leading dot
+        },
+        {
+          name: 'Video',
+          extensions: ALLOWED_VIDEO_EXTENSIONS.map((e) => e.slice(1)),
+        },
+        {
+          name: 'Resim',
+          extensions: ALLOWED_IMAGE_EXTENSIONS.map((e) => e.slice(1)),
+        },
+      ],
+    })
+
+    if (result.canceled) return []
+
+    return result.filePaths.map((filePath) => {
+      const ext = extname(filePath).toLowerCase()
+      return {
+        path: filePath,
+        name: basename(filePath),
+        extension: ext,
+        type: ALLOWED_VIDEO_EXTENSIONS.includes(ext) ? 'video' : 'image',
+      }
+    })
+  })
+
+  // ─── Start Analysis ───
+  ipcMain.handle(
+    'drone:start-analysis',
+    async (
+      _event,
+      files: { path: string; name: string; extension: string; type: string }[],
+    ) => {
+      try {
+        const filePaths = files.map((f) => ({
+          path: f.path,
+          name: f.name,
+          extension: f.extension,
+          type: f.type,
+        }))
+        const response = await backendService.request('analysis:start', {
+          files: filePaths,
+        })
+        return { success: true, data: response }
+      } catch (err) {
+        return { success: false, error: (err as Error).message }
+      }
+    },
+  )
+
+  // ─── Forward Python events to renderer ───
+  backendService.onMessage((message) => {
+    if (!mainWindow) return
+
+    if (message.type === 'analysis:progress') {
+      mainWindow.webContents.send('drone:analysis-progress', message.payload)
+    } else if (message.type === 'analysis:detection') {
+      mainWindow.webContents.send('drone:ai-detection', message.payload)
+    } else if (message.type === 'analysis:color') {
+      mainWindow.webContents.send('drone:color-analysis', message.payload)
+    }
+  })
 
   // IPC: Renderer'dan Python backend'e mesaj gönderme
   ipcMain.handle(

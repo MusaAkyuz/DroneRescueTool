@@ -68,6 +68,14 @@ export class BackendService {
   }
 
   /**
+   * Python backend'den gelen push mesajlarını dinle.
+   * Analiz sırasında Python'dan gelen progress, detection, color eventleri için.
+   */
+  onMessage(callback: (message: WSMessage) => void): void {
+    this.bridge.on('message', callback)
+  }
+
+  /**
    * Bağlantı durumu.
    */
   get isConnected(): boolean {

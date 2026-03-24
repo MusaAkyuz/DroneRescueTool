@@ -2,37 +2,16 @@
 @import "tailwindcss";
 
 body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
-  background-image: url('./wavy-lines.svg');
-  background-size: cover;
   user-select: none;
-}
-
-code {
-  font-weight: 600;
-  padding: 3px 5px;
-  border-radius: 2px;
-  background-color: var(--color-background-mute);
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    SF Mono,
-    Menlo,
-    Consolas,
-    Liberation Mono,
-    monospace;
-  font-size: 85%;
+  margin: 0;
+  padding: 0;
 }
 
 #root {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  margin-bottom: 80px;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .logo {
@@ -147,6 +126,7 @@ code {
   font-size: 14px;
   line-height: 14px;
   opacity: 0.8;
+
   &:last-child {
     border: none;
   }
@@ -165,6 +145,7 @@ code {
 }
 
 @media (max-width: 350px) {
+
   .tip,
   .actions {
     display: none;

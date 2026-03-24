@@ -18,6 +18,11 @@ class MessageRouter:
 
     def __init__(self):
         self._handlers: dict[str, MessageHandler] = {}
+        self._context: dict[str, Any] = {}
+
+    def set_context(self, key: str, value: Any) -> None:
+        """Handler'lara paylaşılacak context değeri ayarla (ör. ws_server)."""
+        self._context[key] = value
 
     def register(self, message_type: str, handler: MessageHandler) -> None:
         """Belirli bir mesaj tipi için handler kaydet."""
@@ -45,7 +50,12 @@ class MessageRouter:
             }
 
         try:
-            result = await handler(payload)
+            # Context değerlerini payload'a injekte et (handler'ların erişimi için)
+            enriched_payload = {**payload}
+            for key, value in self._context.items():
+                enriched_payload[f"_{key}"] = value
+
+            result = await handler(enriched_payload)
             response = {
                 "type": f"{msg_type}:response",
                 "payload": result or {},

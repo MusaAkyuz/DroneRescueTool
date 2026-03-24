@@ -12,6 +12,7 @@ import sys
 from server.websocket_server import WebSocketServer
 from server.message_router import MessageRouter
 from handlers.health_handler import handle_ping, handle_health_check
+from handlers.analysis_handler import handle_analysis_start
 
 # Logging yapılandırması
 logging.basicConfig(
@@ -26,18 +27,19 @@ logger = logging.getLogger("DroneRescueTool")
 WS_PORT = 8765
 
 
-def create_router() -> MessageRouter:
+def create_router(server: WebSocketServer) -> MessageRouter:
     """Mesaj router'ı oluştur ve handler'ları kaydet."""
     router = MessageRouter()
+
+    # Context: WebSocket server referansını handler'lara paylaş
+    router.set_context("ws_server", server)
 
     # Temel handler'lar
     router.register("ping", handle_ping)
     router.register("health:check", handle_health_check)
 
-    # İleride eklenecek handler'lar:
-    # router.register("image:detect", handle_image_detection)
-    # router.register("video:process", handle_video_process)
-    # router.register("file:analyze", handle_file_analyze)
+    # Analiz handler'ları
+    router.register("analysis:start", handle_analysis_start)
 
     return router
 
@@ -47,8 +49,8 @@ async def main():
     logger.info("DroneRescueTool Python Backend başlatılıyor...")
 
     # Bileşenleri oluştur (Dependency Injection)
-    router = create_router()
-    server = WebSocketServer(host="localhost", port=WS_PORT)
+    server = WebSocketServer(host="127.0.0.1", port=WS_PORT)
+    router = create_router(server)
 
     # Router'ı sunucuya bağla
     server.set_message_handler(router.route)

@@ -149,7 +149,7 @@ export class PythonBridge extends EventEmitter {
     }
 
     // Pending requestleri temizle
-    for (const [id, pending] of this.pendingRequests) {
+    for (const [, pending] of this.pendingRequests) {
       clearTimeout(pending.timer)
       pending.reject(new Error('Bağlantı kapatıldı.'))
     }

@@ -65,16 +65,18 @@ export interface AIDetection {
 
 export interface ColorInfo {
   hex: string
-  name: string
+  groupIndex: number // 0-255 renk grubu indexi
   count: number
   percentage: number
-  intensity: number // 0-255
+  frames?: number[] // Bu rengin görüldüğü frame indeksleri
 }
 
 export interface FileColorAnalysis {
   fileName: string
+  filePath?: string
   totalFrames: number
   processedFrames: number
+  fps: number
   colors: ColorInfo[]
 }
 

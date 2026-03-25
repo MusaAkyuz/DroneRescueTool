@@ -13,12 +13,14 @@ interface ContentTabsProps {
   detections: AIDetection[]
   colorData: FileColorAnalysis[]
   files: FileEntry[]
+  onViewFrames?: (fileName: string, groupIndex: number) => void
 }
 
 export default function ContentTabs({
   detections,
   colorData,
   files,
+  onViewFrames,
 }: ContentTabsProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<TabKey>('ai')
 
@@ -62,7 +64,9 @@ export default function ContentTabs({
         {activeTab === 'ai' && (
           <AIDetectionsTab detections={detections} files={files} />
         )}
-        {activeTab === 'color' && <ColorAnalysisTab colorData={colorData} />}
+        {activeTab === 'color' && (
+          <ColorAnalysisTab colorData={colorData} onViewFrames={onViewFrames} />
+        )}
       </div>
     </div>
   )

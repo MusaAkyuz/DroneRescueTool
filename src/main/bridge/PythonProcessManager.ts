@@ -55,6 +55,7 @@ export class PythonProcessManager {
           ...process.env,
           PYTHONIOENCODING: 'utf-8',
           PYTHONUTF8: '1',
+          MOCK_DATA_ENABLED: process.env.MOCK_DATA_ENABLED || '0',
         },
       })
 

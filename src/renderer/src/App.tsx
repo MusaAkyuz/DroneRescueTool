@@ -3,6 +3,7 @@ import FileUpload from './components/FileUpload'
 import Sidebar from './components/Sidebar'
 import ContentTabs from './components/ContentTabs'
 import AnalysisFooter from './components/AnalysisFooter'
+import FrameExplorer from './components/FrameExplorer'
 import type {
   FileEntry,
   AnalysisProgress,
@@ -10,7 +11,7 @@ import type {
   FileColorAnalysis,
 } from '../../shared/types'
 
-type AppView = 'upload' | 'analysis'
+type AppView = 'upload' | 'analysis' | 'frameExplorer'
 
 const initialProgress: AnalysisProgress = {
   status: 'idle',
@@ -27,6 +28,10 @@ function App(): React.JSX.Element {
   const [progress, setProgress] = useState<AnalysisProgress>(initialProgress)
   const [detections, setDetections] = useState<AIDetection[]>([])
   const [colorData, setColorData] = useState<FileColorAnalysis[]>([])
+  const [frameExplorerTarget, setFrameExplorerTarget] = useState<{
+    fileName: string
+    groupIndex: number
+  } | null>(null)
 
   // Listen to events from main process
   useEffect(() => {
@@ -112,6 +117,19 @@ function App(): React.JSX.Element {
     setColorData([])
   }, [])
 
+  const handleViewFrames = useCallback(
+    (fileName: string, groupIndex: number) => {
+      setFrameExplorerTarget({ fileName, groupIndex })
+      setView('frameExplorer')
+    },
+    [],
+  )
+
+  const handleBackFromFrameExplorer = useCallback(() => {
+    setView('analysis')
+    setFrameExplorerTarget(null)
+  }, [])
+
   // Upload View
   if (view === 'upload') {
     return (
@@ -169,6 +187,21 @@ function App(): React.JSX.Element {
     )
   }
 
+  // Frame Explorer View
+  if (view === 'frameExplorer' && frameExplorerTarget) {
+    return (
+      <div className="flex h-screen w-screen flex-col bg-gray-950">
+        <FrameExplorer
+          colorData={colorData}
+          files={files}
+          fileName={frameExplorerTarget.fileName}
+          groupIndex={frameExplorerTarget.groupIndex}
+          onBack={handleBackFromFrameExplorer}
+        />
+      </div>
+    )
+  }
+
   // Analysis View
   return (
     <div className="flex h-screen w-screen flex-col bg-gray-950">
@@ -200,6 +233,7 @@ function App(): React.JSX.Element {
             detections={detections}
             colorData={colorData}
             files={files}
+            onViewFrames={handleViewFrames}
           />
         </div>
       </div>

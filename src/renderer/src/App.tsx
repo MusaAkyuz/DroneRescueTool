@@ -4,43 +4,111 @@ import Sidebar from './components/Sidebar'
 import ContentTabs from './components/ContentTabs'
 import AnalysisFooter from './components/AnalysisFooter'
 import FrameExplorer from './components/FrameExplorer'
+import AnalysisSettingsPopover from './components/AnalysisSettingsPopover'
 import type {
   FileEntry,
-  AnalysisProgress,
-  AIDetection,
   FileColorAnalysis,
+  DetectionGroup,
+  DetectionProgress,
+  ColorProgress,
+  AnalysisSettings,
+  BackendStatus,
 } from '../../shared/types'
+import { DEFAULT_ANALYSIS_SETTINGS } from '../../shared/types'
 
 type AppView = 'upload' | 'analysis' | 'frameExplorer'
 
-const initialProgress: AnalysisProgress = {
+function PythonStatusBadge({
+  status,
+}: {
+  status: BackendStatus
+}): React.JSX.Element {
+  const config: Record<
+    BackendStatus['state'],
+    { color: string; dot: string; label: string }
+  > = {
+    starting: {
+      color: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30',
+      dot: 'bg-yellow-400 animate-pulse',
+      label: 'Python başlatılıyor',
+    },
+    connected: {
+      color: 'bg-green-500/10 text-green-300 border-green-500/30',
+      dot: 'bg-green-400',
+      label: 'Python bağlı',
+    },
+    disconnected: {
+      color: 'bg-orange-500/10 text-orange-300 border-orange-500/30',
+      dot: 'bg-orange-400 animate-pulse',
+      label: 'Yeniden bağlanılıyor',
+    },
+    error: {
+      color: 'bg-red-500/10 text-red-300 border-red-500/30',
+      dot: 'bg-red-400',
+      label: 'Python hatası',
+    },
+  }
+  const c = config[status.state]
+  return (
+    <div
+      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${c.color}`}
+      title={status.message || c.label}
+    >
+      <span className={`h-2 w-2 rounded-full ${c.dot}`} />
+      <span>{c.label}</span>
+    </div>
+  )
+}
+
+const initialDetectionProgress: DetectionProgress = {
   status: 'idle',
   currentFile: '',
   currentFileIndex: 0,
   totalFiles: 0,
   overallPercent: 0,
   filePercent: 0,
+  currentFrame: 0,
+  totalFrames: 0,
+}
+
+const initialColorProgress: ColorProgress = {
+  status: 'idle',
+  overallPercent: 0,
 }
 
 function App(): React.JSX.Element {
   const [view, setView] = useState<AppView>('upload')
   const [files, setFiles] = useState<FileEntry[]>([])
-  const [progress, setProgress] = useState<AnalysisProgress>(initialProgress)
-  const [detections, setDetections] = useState<AIDetection[]>([])
   const [colorData, setColorData] = useState<FileColorAnalysis[]>([])
+  const [detectionGroups, setDetectionGroups] = useState<DetectionGroup[]>([])
+  const [detectionProgress, setDetectionProgress] = useState<DetectionProgress>(
+    initialDetectionProgress,
+  )
+  const [colorProgress, setColorProgress] =
+    useState<ColorProgress>(initialColorProgress)
+  const [analysisSettings, setAnalysisSettings] = useState<AnalysisSettings>(
+    DEFAULT_ANALYSIS_SETTINGS,
+  )
   const [frameExplorerTarget, setFrameExplorerTarget] = useState<{
     fileName: string
     groupIndex: number
   } | null>(null)
+  const [pythonStatus, setPythonStatus] = useState<BackendStatus>({
+    state: 'starting',
+    connected: false,
+    message: 'Python backend başlatılıyor...',
+  })
 
   // Listen to events from main process
   useEffect(() => {
-    const unsubProgress = window.api.onAnalysisProgress((p) => {
-      setProgress(p as AnalysisProgress)
-    })
+    // Initial status fetch
+    window.api
+      .getPythonStatus()
+      .then((s) => setPythonStatus(s))
+      .catch(() => {})
 
-    const unsubDetection = window.api.onAIDetection((d) => {
-      setDetections((prev) => [...prev, d as AIDetection])
+    const unsubStatus = window.api.onPythonStatus((s) => {
+      setPythonStatus(s as BackendStatus)
     })
 
     const unsubColor = window.api.onColorAnalysis((c) => {
@@ -56,10 +124,24 @@ function App(): React.JSX.Element {
       })
     })
 
+    const unsubDetProgress = window.api.onDetectionProgress((p) => {
+      setDetectionProgress(p as DetectionProgress)
+    })
+
+    const unsubDetGroup = window.api.onDetectionGroup((g) => {
+      setDetectionGroups((prev) => [...prev, g as DetectionGroup])
+    })
+
+    const unsubColorProgress = window.api.onColorProgress((p) => {
+      setColorProgress(p as ColorProgress)
+    })
+
     return () => {
-      unsubProgress()
-      unsubDetection()
       unsubColor()
+      unsubDetProgress()
+      unsubDetGroup()
+      unsubColorProgress()
+      unsubStatus()
     }
   }, [])
 
@@ -71,50 +153,57 @@ function App(): React.JSX.Element {
         const unique = newFiles.filter((f) => !existing.has(f.path))
         return [...prev, ...unique]
       })
-      if (view === 'upload' && (files.length > 0 || newFiles.length > 0)) {
-        // Stay on upload until they click start
-      }
     },
     [view, files.length],
   )
 
   const handleStartAnalysis = useCallback(async () => {
     if (files.length === 0) return
+    if (!pythonStatus.connected) {
+      // Bağlı değilse başlatma
+      return
+    }
 
     // Reset previous results
-    setDetections([])
     setColorData([])
-    setProgress({
-      ...initialProgress,
+    setDetectionGroups([])
+    setDetectionProgress({
+      ...initialDetectionProgress,
       totalFiles: files.length,
       status: 'analyzing',
     })
+    setColorProgress({
+      status: 'analyzing',
+      overallPercent: 0,
+    })
     setView('analysis')
 
+    // Start unified detection (YOLO + color in single pass)
     try {
-      const result = await window.api.startAnalysis(files)
+      const result = await window.api.startDetection(files, analysisSettings)
       if (!result.success) {
-        setProgress((prev) => ({
+        setDetectionProgress((prev) => ({
           ...prev,
           status: 'error',
-          message: result.error || 'Analiz başlatılamadı',
+          message: result.error || 'Tespit başlatılamadı',
         }))
       }
     } catch (err) {
-      setProgress((prev) => ({
+      setDetectionProgress((prev) => ({
         ...prev,
         status: 'error',
         message: (err as Error).message,
       }))
     }
-  }, [files])
+  }, [files, analysisSettings, pythonStatus.connected])
 
   const handleReset = useCallback(() => {
     setView('upload')
     setFiles([])
-    setProgress(initialProgress)
-    setDetections([])
     setColorData([])
+    setDetectionGroups([])
+    setDetectionProgress(initialDetectionProgress)
+    setColorProgress(initialColorProgress)
   }, [])
 
   const handleViewFrames = useCallback(
@@ -136,19 +225,35 @@ function App(): React.JSX.Element {
       <div className="flex h-screen w-screen flex-col bg-gray-950">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-gray-800 px-6 py-3">
-          <h1 className="text-lg font-bold text-gray-200">
-            🚁 DroneRescueTool
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold text-gray-200">
+              🚁 DroneRescueTool
+            </h1>
+            <PythonStatusBadge status={pythonStatus} />
+          </div>
           {files.length > 0 && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <span className="text-sm text-gray-400">
                 {files.length} dosya seçildi
               </span>
+              <AnalysisSettingsPopover
+                settings={analysisSettings}
+                onSettingsChange={setAnalysisSettings}
+              />
               <button
                 onClick={handleStartAnalysis}
-                className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+                disabled={!pythonStatus.connected}
+                title={
+                  pythonStatus.connected
+                    ? 'Analizi başlat'
+                    : pythonStatus.message ||
+                      'Python backend bağlı değil, lütfen bekleyin...'
+                }
+                className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
               >
-                🔬 Analiz İşlemine Başla
+                {pythonStatus.connected
+                  ? '🔬 Analiz İşlemine Başla'
+                  : '⏳ Python başlatılıyor...'}
               </button>
             </div>
           )}
@@ -193,7 +298,6 @@ function App(): React.JSX.Element {
       <div className="flex h-screen w-screen flex-col bg-gray-950">
         <FrameExplorer
           colorData={colorData}
-          files={files}
           fileName={frameExplorerTarget.fileName}
           groupIndex={frameExplorerTarget.groupIndex}
           onBack={handleBackFromFrameExplorer}
@@ -207,9 +311,14 @@ function App(): React.JSX.Element {
     <div className="flex h-screen w-screen flex-col bg-gray-950">
       {/* Header */}
       <header className="flex items-center justify-between border-b border-gray-800 px-6 py-3">
-        <h1 className="text-lg font-bold text-gray-200">🚁 DroneRescueTool</h1>
         <div className="flex items-center gap-3">
-          {progress.status === 'completed' && (
+          <h1 className="text-lg font-bold text-gray-200">
+            🚁 DroneRescueTool
+          </h1>
+          <PythonStatusBadge status={pythonStatus} />
+        </div>
+        <div className="flex items-center gap-3">
+          {detectionProgress.status === 'completed' && (
             <button
               onClick={handleReset}
               className="rounded-lg bg-gray-700 px-4 py-1.5 text-sm font-medium text-gray-200 transition-colors hover:bg-gray-600"
@@ -224,22 +333,25 @@ function App(): React.JSX.Element {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - 25% */}
         <div className="w-1/4 min-w-48">
-          <Sidebar files={files} currentFile={progress.currentFile} />
+          <Sidebar files={files} currentFile={detectionProgress.currentFile} />
         </div>
 
         {/* Content Area - 75% */}
         <div className="w-3/4">
           <ContentTabs
-            detections={detections}
             colorData={colorData}
-            files={files}
+            detectionGroups={detectionGroups}
+            detectionProgress={detectionProgress}
             onViewFrames={handleViewFrames}
           />
         </div>
       </div>
 
       {/* Footer - Progress */}
-      <AnalysisFooter progress={progress} />
+      <AnalysisFooter
+        detectionProgress={detectionProgress}
+        colorProgress={colorProgress}
+      />
     </div>
   )
 }

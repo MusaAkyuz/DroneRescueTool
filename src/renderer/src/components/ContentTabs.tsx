@@ -1,31 +1,36 @@
 import { useState } from 'react'
-import AIDetectionsTab from './AIDetectionsTab'
 import ColorAnalysisTab from './ColorAnalysisTab'
+import DetectionTab from './DetectionTab'
 import type {
-  AIDetection,
   FileColorAnalysis,
-  FileEntry,
+  DetectionGroup,
+  DetectionProgress,
 } from '../../../shared/types'
 
-type TabKey = 'ai' | 'color'
+type TabKey = 'detection' | 'color'
 
 interface ContentTabsProps {
-  detections: AIDetection[]
   colorData: FileColorAnalysis[]
-  files: FileEntry[]
+  detectionGroups: DetectionGroup[]
+  detectionProgress: DetectionProgress
   onViewFrames?: (fileName: string, groupIndex: number) => void
 }
 
 export default function ContentTabs({
-  detections,
   colorData,
-  files,
+  detectionGroups,
+  detectionProgress,
   onViewFrames,
 }: ContentTabsProps): React.JSX.Element {
-  const [activeTab, setActiveTab] = useState<TabKey>('ai')
+  const [activeTab, setActiveTab] = useState<TabKey>('detection')
 
   const tabs: { key: TabKey; label: string; icon: string; count?: number }[] = [
-    { key: 'ai', label: 'AI Tespitleri', icon: '🤖', count: detections.length },
+    {
+      key: 'detection',
+      label: 'AI Tespit (YOLO)',
+      icon: '🎯',
+      count: detectionGroups.length,
+    },
     {
       key: 'color',
       label: 'Renk Analizi',
@@ -61,8 +66,8 @@ export default function ContentTabs({
 
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'ai' && (
-          <AIDetectionsTab detections={detections} files={files} />
+        {activeTab === 'detection' && (
+          <DetectionTab groups={detectionGroups} progress={detectionProgress} />
         )}
         {activeTab === 'color' && (
           <ColorAnalysisTab colorData={colorData} onViewFrames={onViewFrames} />

@@ -4,23 +4,35 @@ import { electronAPI } from '@electron-toolkit/preload'
 // Custom APIs for renderer - DroneRescueTool specific
 const api = {
   selectFiles: () => ipcRenderer.invoke('drone:select-files'),
-  startAnalysis: (
+  startDetection: (
     files: { path: string; name: string; extension: string; type: string }[],
-  ) => ipcRenderer.invoke('drone:start-analysis', files),
-  onAnalysisProgress: (callback: (progress: unknown) => void) => {
+    settings?: {
+      yoloInterval?: number
+      colorInterval?: number
+      confidence?: number
+    },
+  ) => ipcRenderer.invoke('drone:start-detection', files, settings),
+  onDetectionProgress: (callback: (progress: unknown) => void) => {
     const handler = (_event: unknown, progress: unknown): void =>
       callback(progress)
-    ipcRenderer.on('drone:analysis-progress', handler)
+    ipcRenderer.on('drone:detection-progress', handler)
     return (): void => {
-      ipcRenderer.removeListener('drone:analysis-progress', handler)
+      ipcRenderer.removeListener('drone:detection-progress', handler)
     }
   },
-  onAIDetection: (callback: (detection: unknown) => void) => {
-    const handler = (_event: unknown, detection: unknown): void =>
-      callback(detection)
-    ipcRenderer.on('drone:ai-detection', handler)
+  onDetectionGroup: (callback: (group: unknown) => void) => {
+    const handler = (_event: unknown, group: unknown): void => callback(group)
+    ipcRenderer.on('drone:detection-group', handler)
     return (): void => {
-      ipcRenderer.removeListener('drone:ai-detection', handler)
+      ipcRenderer.removeListener('drone:detection-group', handler)
+    }
+  },
+  onColorProgress: (callback: (progress: unknown) => void) => {
+    const handler = (_event: unknown, progress: unknown): void =>
+      callback(progress)
+    ipcRenderer.on('drone:color-progress', handler)
+    return (): void => {
+      ipcRenderer.removeListener('drone:color-progress', handler)
     }
   },
   onColorAnalysis: (callback: (analysis: unknown) => void) => {
@@ -32,6 +44,13 @@ const api = {
     }
   },
   getPythonStatus: () => ipcRenderer.invoke('python:status'),
+  onPythonStatus: (callback: (status: unknown) => void) => {
+    const handler = (_event: unknown, status: unknown): void => callback(status)
+    ipcRenderer.on('drone:python-status', handler)
+    return (): void => {
+      ipcRenderer.removeListener('drone:python-status', handler)
+    }
+  },
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

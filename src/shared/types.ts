@@ -34,41 +34,49 @@ export interface FileEntry {
   type: FileType
 }
 
-// ─── Analysis Progress ───
+// ─── Detection Frame & Group (YOLO) ───
 
-export type AnalysisStatus = 'idle' | 'analyzing' | 'completed' | 'error'
+export interface DetectionFrameResult {
+  frameIndex: number
+  time: number
+  detections: {
+    label: string
+    confidence: number
+    bbox: { x: number; y: number; w: number; h: number }
+  }[]
+  thumbnail: string // base64 JPEG
+}
 
-export interface AnalysisProgress {
-  status: AnalysisStatus
+export interface DetectionGroup {
+  id: string
+  fileName: string
+  filePath: string
+  startFrame: number
+  endFrame: number
+  startTime: number
+  endTime: number
+  frameCount: number
+  frames: DetectionFrameResult[]
+}
+
+export interface DetectionProgress {
+  status: 'idle' | 'analyzing' | 'completed' | 'error'
   currentFile: string
   currentFileIndex: number
   totalFiles: number
   overallPercent: number
   filePercent: number
+  currentFrame: number
+  totalFrames: number
   message?: string
 }
 
-// ─── AI Detection ───
+// ─── Color Analysis (Palette) ───
 
-export interface AIDetection {
-  id: string
-  fileName: string
-  filePath?: string
-  label: string
-  confidence: number
-  startTime: number // seconds (for video)
-  endTime: number // seconds (for video)
-  bbox?: { x: number; y: number; w: number; h: number }
-}
-
-// ─── Color Analysis ───
-
-export interface ColorInfo {
+export interface PaletteColor {
+  groupIndex: number // 0-255
   hex: string
-  groupIndex: number // 0-255 renk grubu indexi
-  count: number
-  percentage: number
-  frames?: number[] // Bu rengin görüldüğü frame indeksleri
+  found: boolean
 }
 
 export interface FileColorAnalysis {
@@ -77,22 +85,75 @@ export interface FileColorAnalysis {
   totalFrames: number
   processedFrames: number
   fps: number
-  colors: ColorInfo[]
+  palette: PaletteColor[] // 256 slot — found=true bulunan renkler
+}
+
+export interface ColorProgress {
+  status: 'idle' | 'analyzing' | 'completed' | 'error'
+  overallPercent: number
+  framesProcessed?: number
+  message?: string
+}
+
+// ─── AI Detection (flattened group for UI) ───
+
+export interface AIDetection {
+  id: string
+  label: string
+  confidence: number
+  bbox: { x: number; y: number; w: number; h: number }
+  fileName: string
+  filePath?: string
+  startTime: number
+  endTime: number
+  thumbnail?: string
+}
+
+// ─── Analysis Settings ───
+
+export interface AnalysisSettings {
+  yoloInterval: number // Her N frame'de bir YOLO (varsayılan 10)
+  colorInterval: number // Her N frame'de bir renk (varsayılan 30)
+  confidence: number // YOLO güven eşiği (varsayılan 0.25)
+}
+
+export const DEFAULT_ANALYSIS_SETTINGS: AnalysisSettings = {
+  yoloInterval: 10,
+  colorInterval: 30,
+  confidence: 0.25,
+}
+
+// ─── Python Backend Status ───
+
+export type BackendStatusState =
+  | 'starting'
+  | 'connected'
+  | 'disconnected'
+  | 'error'
+
+export interface BackendStatus {
+  state: BackendStatusState
+  connected: boolean
+  message?: string
+  logPath?: string
 }
 
 // ─── IPC API ───
 
 export interface DroneAPI {
   selectFiles: () => Promise<FileEntry[]>
-  startAnalysis: (
+  startDetection: (
     files: FileEntry[],
+    settings?: AnalysisSettings,
   ) => Promise<{ success: boolean; error?: string }>
-  onAnalysisProgress: (
-    callback: (progress: AnalysisProgress) => void,
+  onDetectionProgress: (
+    callback: (progress: DetectionProgress) => void,
   ) => () => void
-  onAIDetection: (callback: (detection: AIDetection) => void) => () => void
+  onDetectionGroup: (callback: (group: DetectionGroup) => void) => () => void
+  onColorProgress: (callback: (progress: ColorProgress) => void) => () => void
   onColorAnalysis: (
     callback: (analysis: FileColorAnalysis) => void,
   ) => () => void
-  getPythonStatus: () => Promise<{ connected: boolean }>
+  getPythonStatus: () => Promise<BackendStatus>
+  onPythonStatus: (callback: (status: BackendStatus) => void) => () => void
 }

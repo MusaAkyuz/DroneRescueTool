@@ -11,8 +11,19 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+extraResources:
+  - from: dist_python/python_backend
+    to: python_backend
+    filter:
+      - '**/*'
+  - from: models
+    to: models
+    filter:
+      - '**/*'
+      - '!README.md'
 win:
   executableName: DroneRescueTool
+  forceCodeSigning: false
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

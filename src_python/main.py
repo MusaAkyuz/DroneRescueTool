@@ -12,13 +12,18 @@ import sys
 from server.websocket_server import WebSocketServer
 from server.message_router import MessageRouter
 from handlers.health_handler import handle_ping, handle_health_check
-from handlers.analysis_handler import handle_analysis_start
+from handlers.detection_handler import handle_detection_start
 
 # Logging yapılandırması
+# Windows'ta cp1252 encoding Türkçe karakterleri desteklemez, UTF-8 zorla
+_stdout_handler = logging.StreamHandler(sys.stdout)
+_stdout_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+if hasattr(_stdout_handler.stream, 'reconfigure'):
+    _stdout_handler.stream.reconfigure(encoding='utf-8', errors='replace')
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+    handlers=[_stdout_handler],
 )
 
 logger = logging.getLogger("DroneRescueTool")
@@ -38,8 +43,8 @@ def create_router(server: WebSocketServer) -> MessageRouter:
     router.register("ping", handle_ping)
     router.register("health:check", handle_health_check)
 
-    # Analiz handler'ları
-    router.register("analysis:start", handle_analysis_start)
+    # Birleşik analiz: YOLO + Renk (tek video açılışı)
+    router.register("detection:start", handle_detection_start)
 
     return router
 

@@ -3,50 +3,120 @@
  * Facade pattern: Tek bir arayüz üzerinden backend erişimi sağlar.
  */
 
+import { EventEmitter } from 'events'
 import { PythonBridge, WSMessage } from './PythonBridge'
 import { PythonProcessManager } from './PythonProcessManager'
+import { logger } from '../logger'
 
-export class BackendService {
+export type BackendStatusState =
+  | 'starting'
+  | 'connected'
+  | 'disconnected'
+  | 'error'
+
+export interface BackendStatus {
+  state: BackendStatusState
+  connected: boolean
+  message?: string
+  logPath?: string
+}
+
+export class BackendService extends EventEmitter {
   private bridge: PythonBridge
   private processManager: PythonProcessManager
+  private currentStatus: BackendStatus = {
+    state: 'starting',
+    connected: false,
+    message: 'Python backend başlatılıyor...',
+  }
 
   constructor() {
+    super()
     this.bridge = new PythonBridge()
     this.processManager = new PythonProcessManager()
+  }
+
+  private setStatus(next: Partial<BackendStatus>): void {
+    this.currentStatus = { ...this.currentStatus, ...next }
+    this.emit('status', this.currentStatus)
+  }
+
+  getStatus(): BackendStatus {
+    return this.currentStatus
+  }
+
+  onStatus(callback: (status: BackendStatus) => void): void {
+    this.on('status', callback)
   }
 
   /**
    * Python backend'i başlat ve WebSocket bağlantısını kur.
    */
   async initialize(): Promise<void> {
-    console.log('[BackendService] Başlatılıyor...')
+    logger.info('BackendService', 'Başlatılıyor...')
+    this.setStatus({
+      state: 'starting',
+      connected: false,
+      message: 'Python backend başlatılıyor...',
+      logPath: this.processManager.getLogPath(),
+    })
+
+    // Python süreç olaylarını dinle
+    this.processManager.on('exit', (code: number, message?: string) => {
+      this.setStatus({
+        state: 'error',
+        connected: false,
+        message:
+          message ||
+          `Python backend beklenmedik şekilde kapandı (exit ${code}).`,
+      })
+    })
 
     // 1. Python sürecini başlat
-    await this.processManager.start()
+    try {
+      await this.processManager.start()
+    } catch (err) {
+      this.setStatus({
+        state: 'error',
+        connected: false,
+        message: `Python backend başlatılamadı: ${(err as Error).message}`,
+      })
+      throw err
+    }
 
     // 2. WebSocket bağlantısını kur
     this.bridge.connect()
 
     // 3. Bağlantı olaylarını dinle
     this.bridge.on('connected', async () => {
-      console.log('[BackendService] Python backend bağlantısı kuruldu.')
+      logger.info('BackendService', 'Python backend bağlantısı kuruldu.')
+      this.setStatus({
+        state: 'connected',
+        connected: true,
+        message: 'Python backend bağlı.',
+      })
       try {
         const health = await this.bridge.request('health:check')
-        console.log(
-          '[BackendService] Sağlık kontrolü:',
-          JSON.stringify(health.payload),
-        )
+        logger.info('BackendService', 'Sağlık kontrolü:', JSON.stringify(health.payload))
       } catch (err) {
-        console.error('[BackendService] Sağlık kontrolü başarısız:', err)
+        logger.error('BackendService', 'Sağlık kontrolü başarısız:', (err as Error).message)
       }
     })
 
     this.bridge.on('disconnected', () => {
-      console.log('[BackendService] Python backend bağlantısı kesildi.')
+      logger.warn('BackendService', 'Python backend bağlantısı kesildi.')
+      // Eğer süreç hala çalışıyorsa "starting" durumunda kalır (yeniden bağlanma deneniyor)
+      if (this.currentStatus.state !== 'error') {
+        this.setStatus({
+          state: 'disconnected',
+          connected: false,
+          message: 'Python backend ile bağlantı kesildi, yeniden deneniyor...',
+        })
+      }
     })
 
     this.bridge.on('error', (err: Error) => {
-      console.error('[BackendService] Bridge hatası:', err.message)
+      logger.error('BackendService', 'Bridge hatası:', err.message)
     })
   }
 
@@ -86,7 +156,7 @@ export class BackendService {
    * Backend servisini kapat.
    */
   shutdown(): void {
-    console.log('[BackendService] Kapatılıyor...')
+    logger.info('BackendService', 'Kapatılıyor...')
     this.bridge.disconnect()
     this.processManager.stop()
   }

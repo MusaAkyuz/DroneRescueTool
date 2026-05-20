@@ -5,6 +5,7 @@
 
 import WebSocket from 'ws'
 import { EventEmitter } from 'events'
+import { logger } from '../logger'
 
 export interface WSMessage {
   type: string
@@ -56,7 +57,7 @@ export class PythonBridge extends EventEmitter {
       this.ws = new WebSocket(this.url)
 
       this.ws.on('open', () => {
-        console.log('[PythonBridge] Bağlantı kuruldu:', this.url)
+        logger.info('PythonBridge', 'Bağlantı kuruldu:', this.url)
         this.emit('connected')
       })
 
@@ -74,23 +75,23 @@ export class PythonBridge extends EventEmitter {
 
           this.emit('message', message)
         } catch (err) {
-          console.error('[PythonBridge] Mesaj parse hatası:', err)
+          logger.error('PythonBridge', 'Mesaj parse hatası:', (err as Error).message)
         }
       })
 
       this.ws.on('close', () => {
-        console.log('[PythonBridge] Bağlantı kapandı.')
+        logger.info('PythonBridge', 'Bağlantı kapandı.')
         this.ws = null
         this.emit('disconnected')
         this.scheduleReconnect()
       })
 
       this.ws.on('error', (err: Error) => {
-        console.error('[PythonBridge] WebSocket hatası:', err.message)
+        logger.error('PythonBridge', 'WebSocket hatası:', err.message)
         this.emit('error', err)
       })
     } catch (err) {
-      console.error('[PythonBridge] Bağlantı oluşturma hatası:', err)
+      logger.error('PythonBridge', 'Bağlantı oluşturma hatası:', (err as Error).message)
       this.scheduleReconnect()
     }
   }
@@ -100,7 +101,7 @@ export class PythonBridge extends EventEmitter {
    */
   send(type: string, payload: Record<string, unknown> = {}): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[PythonBridge] Bağlantı yok, mesaj gönderilemedi.')
+      logger.warn('PythonBridge', 'Bağlantı yok, mesaj gönderilemedi.')
       return false
     }
 
@@ -160,7 +161,7 @@ export class PythonBridge extends EventEmitter {
       this.ws = null
     }
 
-    console.log('[PythonBridge] Bağlantı kapatıldı.')
+    logger.info('PythonBridge', 'Bağlantı kapatıldı.')
   }
 
   /**
@@ -175,7 +176,7 @@ export class PythonBridge extends EventEmitter {
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
-      console.log('[PythonBridge] Yeniden bağlanılıyor...')
+      logger.info('PythonBridge', 'Yeniden bağlanılıyor...')
       this.connect()
     }, this.reconnectInterval)
   }

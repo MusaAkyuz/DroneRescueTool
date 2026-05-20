@@ -12,6 +12,11 @@ import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { BackendService } from './bridge'
+import { logger } from './logger'
+
+// Logger'ı mümkün olan en erken noktada başlat
+logger.init()
+logger.info('App', 'Main process başlatılıyor...')
 
 // Python backend servisi
 const backendService = new BackendService()
@@ -53,6 +58,7 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
+  logger.info('Window', 'BrowserWindow oluşturuluyor...')
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -69,6 +75,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
+    logger.info('Window', 'Pencere gösterilmeye hazır.')
     mainWindow!.show()
   })
 
@@ -80,9 +87,12 @@ function createWindow(): void {
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    logger.info('Window', 'Dev URL yükleniyor:', process.env['ELECTRON_RENDERER_URL'])
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    const htmlPath = join(__dirname, '../renderer/index.html')
+    logger.info('Window', 'Production HTML yükleniyor:', htmlPath)
+    mainWindow.loadFile(htmlPath)
   }
 }
 
@@ -90,6 +100,7 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  logger.info('App', 'Electron hazır, uygulama başlatılıyor...')
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
@@ -150,22 +161,37 @@ app.whenReady().then(() => {
     })
   })
 
-  // ─── Start Analysis ───
+  // ─── Start AI Detection (YOLO + Color unified) ───
   ipcMain.handle(
-    'drone:start-analysis',
+    'drone:start-detection',
     async (
       _event,
       files: { path: string; name: string; extension: string; type: string }[],
+      settings?: {
+        yoloInterval?: number
+        colorInterval?: number
+        confidence?: number
+      },
     ) => {
       try {
+        if (!backendService.isConnected) {
+          return {
+            success: false,
+            error:
+              'Python backend bağlı değil. Analiz başlatılamaz. Lütfen birkaç saniye bekleyip tekrar deneyin.',
+          }
+        }
         const filePaths = files.map((f) => ({
           path: f.path,
           name: f.name,
           extension: f.extension,
           type: f.type,
         }))
-        const response = await backendService.request('analysis:start', {
+        const response = await backendService.request('detection:start', {
           files: filePaths,
+          confidence: settings?.confidence ?? 0.25,
+          yoloInterval: settings?.yoloInterval ?? 10,
+          colorInterval: settings?.colorInterval ?? 30,
         })
         return { success: true, data: response }
       } catch (err) {
@@ -178,12 +204,14 @@ app.whenReady().then(() => {
   backendService.onMessage((message) => {
     if (!mainWindow) return
 
-    if (message.type === 'analysis:progress') {
-      mainWindow.webContents.send('drone:analysis-progress', message.payload)
-    } else if (message.type === 'analysis:detection') {
-      mainWindow.webContents.send('drone:ai-detection', message.payload)
-    } else if (message.type === 'analysis:color') {
+    if (message.type === 'analysis:color') {
       mainWindow.webContents.send('drone:color-analysis', message.payload)
+    } else if (message.type === 'color:progress') {
+      mainWindow.webContents.send('drone:color-progress', message.payload)
+    } else if (message.type === 'detection:progress') {
+      mainWindow.webContents.send('drone:detection-progress', message.payload)
+    } else if (message.type === 'detection:group') {
+      mainWindow.webContents.send('drone:detection-group', message.payload)
     }
   })
 
@@ -201,12 +229,21 @@ app.whenReady().then(() => {
   )
 
   ipcMain.handle('python:status', () => {
-    return { connected: backendService.isConnected }
+    return {
+      ...backendService.getStatus(),
+    }
+  })
+
+  // Backend status değişimlerini renderer'a forward et
+  backendService.onStatus((status) => {
+    if (!mainWindow) return
+    mainWindow.webContents.send('drone:python-status', status)
   })
 
   // Python backend'i başlat
+  logger.info('App', 'Python backend başlatılıyor...')
   backendService.initialize().catch((err) => {
-    console.error('Python backend başlatılamadı:', err)
+    logger.error('App', 'Python backend başlatılamadı:', (err as Error).message)
   })
 
   createWindow()
@@ -222,6 +259,7 @@ app.whenReady().then(() => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
+  logger.info('App', 'Tüm pencereler kapatıldı.')
   if (process.platform !== 'darwin') {
     app.quit()
   }
@@ -229,6 +267,7 @@ app.on('window-all-closed', () => {
 
 // Uygulama kapanırken Python backend'i kapat
 app.on('before-quit', () => {
+  logger.info('App', 'Uygulama kapatılıyor...')
   backendService.shutdown()
 })
 

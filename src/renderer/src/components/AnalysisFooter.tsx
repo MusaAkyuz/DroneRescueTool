@@ -1,13 +1,27 @@
-import type { AnalysisProgress } from '../../../shared/types'
+import type { DetectionProgress, ColorProgress } from '../../../shared/types'
 
 interface AnalysisFooterProps {
-  progress: AnalysisProgress
+  detectionProgress: DetectionProgress
+  colorProgress: ColorProgress
 }
 
 export default function AnalysisFooter({
-  progress,
+  detectionProgress,
+  colorProgress,
 }: AnalysisFooterProps): React.JSX.Element {
-  if (progress.status === 'idle') {
+  const bothIdle =
+    detectionProgress.status === 'idle' && colorProgress.status === 'idle'
+  const bothCompleted =
+    detectionProgress.status === 'completed' &&
+    colorProgress.status === 'completed'
+  const anyError =
+    detectionProgress.status === 'error' || colorProgress.status === 'error'
+
+  // Overall = average of both
+  const overallPercent =
+    (detectionProgress.overallPercent + colorProgress.overallPercent) / 2
+
+  if (bothIdle) {
     return (
       <footer className="flex h-10 items-center border-t border-gray-700 bg-gray-900/90 px-4">
         <span className="text-xs text-gray-500">Analiz bekliyor...</span>
@@ -15,7 +29,7 @@ export default function AnalysisFooter({
     )
   }
 
-  if (progress.status === 'completed') {
+  if (bothCompleted) {
     return (
       <footer className="flex h-14 items-center border-t border-green-800 bg-green-900/30 px-4">
         <div className="flex w-full items-center justify-between">
@@ -26,21 +40,21 @@ export default function AnalysisFooter({
             </span>
           </div>
           <span className="text-xs text-gray-400">
-            {progress.totalFiles} dosya işlendi
+            {detectionProgress.totalFiles} dosya işlendi
           </span>
         </div>
       </footer>
     )
   }
 
-  if (progress.status === 'error') {
+  if (anyError) {
+    const errorMsg =
+      detectionProgress.message || colorProgress.message || 'Bilinmeyen hata'
     return (
       <footer className="flex h-14 items-center border-t border-red-800 bg-red-900/30 px-4">
         <div className="flex w-full items-center gap-2">
           <span className="text-lg">❌</span>
-          <span className="text-sm text-red-400">
-            Hata: {progress.message || 'Bilinmeyen hata'}
-          </span>
+          <span className="text-sm text-red-400">Hata: {errorMsg}</span>
         </div>
       </footer>
     )
@@ -56,39 +70,54 @@ export default function AnalysisFooter({
           <div className="min-w-0">
             <p className="truncate text-xs text-gray-300">
               <span className="text-gray-500">Dosya:</span>{' '}
-              {progress.currentFile}
+              {detectionProgress.currentFile}
             </p>
             <p className="text-xs text-gray-500">
-              {progress.currentFileIndex + 1} / {progress.totalFiles}
+              Frame {detectionProgress.currentFrame}/
+              {detectionProgress.totalFrames}
             </p>
           </div>
         </div>
 
-        {/* Center: File progress */}
-        <div className="mx-4 flex items-center gap-3">
-          <span className="text-xs text-gray-500">Dosya:</span>
-          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-gray-700">
+        {/* Center: YOLO progress */}
+        <div className="mx-3 flex items-center gap-2">
+          <span className="text-xs text-gray-500">🎯 YOLO:</span>
+          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-gray-700">
+            <div
+              className="h-full rounded-full bg-purple-500 transition-all duration-300"
+              style={{ width: `${detectionProgress.filePercent}%` }}
+            />
+          </div>
+          <span className="w-10 text-right font-mono text-xs text-purple-400">
+            %{detectionProgress.filePercent.toFixed(0)}
+          </span>
+        </div>
+
+        {/* Center-right: Color progress */}
+        <div className="mx-3 flex items-center gap-2">
+          <span className="text-xs text-gray-500">🎨 Renk:</span>
+          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-gray-700">
             <div
               className="h-full rounded-full bg-cyan-500 transition-all duration-300"
-              style={{ width: `${progress.filePercent}%` }}
+              style={{ width: `${colorProgress.overallPercent}%` }}
             />
           </div>
           <span className="w-10 text-right font-mono text-xs text-cyan-400">
-            %{progress.filePercent.toFixed(0)}
+            %{colorProgress.overallPercent.toFixed(0)}
           </span>
         </div>
 
         {/* Right: Overall progress */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">Genel:</span>
-          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-gray-700">
+          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-gray-700">
             <div
               className="h-full rounded-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${progress.overallPercent}%` }}
+              style={{ width: `${overallPercent}%` }}
             />
           </div>
           <span className="w-10 text-right font-mono text-xs text-blue-400">
-            %{progress.overallPercent.toFixed(0)}
+            %{overallPercent.toFixed(0)}
           </span>
         </div>
       </div>

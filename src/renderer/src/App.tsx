@@ -226,9 +226,7 @@ function App(): React.JSX.Element {
         {/* Header */}
         <header className="flex items-center justify-between border-b border-gray-800 px-6 py-3">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold text-gray-200">
-              🚁 DroneRescueTool
-            </h1>
+            <h1 className="text-lg font-bold text-gray-200">🚁 KARAKURT</h1>
             <PythonStatusBadge status={pythonStatus} />
           </div>
           {files.length > 0 && (
@@ -312,9 +310,7 @@ function App(): React.JSX.Element {
       {/* Header */}
       <header className="flex items-center justify-between border-b border-gray-800 px-6 py-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold text-gray-200">
-            🚁 DroneRescueTool
-          </h1>
+          <h1 className="text-lg font-bold text-gray-200">🚁 KARAKURT</h1>
           <PythonStatusBadge status={pythonStatus} />
         </div>
         <div className="flex items-center gap-3">

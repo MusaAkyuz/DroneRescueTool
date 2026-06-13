@@ -1,5 +1,5 @@
-appId: com.dronesrescuetool.app
-productName: DroneRescueTool
+appId: com.karakurt.app
+productName: KARAKURT
 directories:
   buildResources: build
 files:
@@ -22,8 +22,9 @@ extraResources:
       - '**/*'
       - '!README.md'
 win:
-  executableName: DroneRescueTool
+  executableName: KARAKURT
   forceCodeSigning: false
+  icon: build/icon.ico
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

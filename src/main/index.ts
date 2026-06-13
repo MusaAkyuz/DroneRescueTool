@@ -10,7 +10,7 @@ import {
 import { join, extname, basename } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import icon from '../../resources/icon.ico?asset'
 import { BackendService } from './bridge'
 import { logger } from './logger'
 
@@ -87,7 +87,11 @@ function createWindow(): void {
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    logger.info('Window', 'Dev URL yükleniyor:', process.env['ELECTRON_RENDERER_URL'])
+    logger.info(
+      'Window',
+      'Dev URL yükleniyor:',
+      process.env['ELECTRON_RENDERER_URL'],
+    )
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     const htmlPath = join(__dirname, '../renderer/index.html')
